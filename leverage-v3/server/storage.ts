@@ -43,16 +43,24 @@ import {
   type PipelineRun, type InsertPipelineRun,
   type PipelineStep, type InsertPipelineStep,
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
+// Manually construct Drizzle instance to avoid importing better-sqlite3 native binary.
+// We import only the session (no native dep) and build the db object ourselves.
+import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core/dialect";
+// @ts-expect-error — importing internal session module directly to avoid better-sqlite3 native import
+import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session.js";
 import { eq, and, sql, desc, asc, like, isNull } from "drizzle-orm";
 import * as fs from "fs";
 import * as path from "path";
+import { createCompatDatabase } from "./sqlite-compat";
 
-const sqlite = new Database("data.db");
-sqlite.pragma("journal_mode = WAL");
+// sql.js requires async init — use top-level await (supported in ESM)
+const sqlite = await createCompatDatabase("data.db");
 
-export const db = drizzle(sqlite);
+// Construct Drizzle manually (same as drizzle-orm/better-sqlite3/driver.js construct())
+const dialect = new SQLiteSyncDialect({});
+const session = new BetterSQLiteSession(sqlite, dialect, undefined, {});
+export const db: any = new BaseSQLiteDatabase("sync" as any, dialect, session, undefined);
 
 // ========================================================================
 // Schema v2 — DDL with all tables, new columns, and indexes

@@ -304,7 +304,7 @@ const DATE_FORMATS: { pattern: RegExp; format: string; parser: (s: string) => st
   },
 ];
 
-function detectDateFormat(values: string[]): { format: string; parser: (s: string) => string } | null {
+function detectDateFormat(values: string[]): { pattern: RegExp; format: string; parser: (s: string) => string } | null {
   const nonEmpty = values.filter(v => v && String(v).trim());
   if (nonEmpty.length === 0) return null;
 
