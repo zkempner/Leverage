@@ -31,6 +31,7 @@ import { runTariffLookup, lookupHtsRate } from "./services/TariffLookupService";
 import { runCategoryBrief } from "./services/CategoryBriefService";
 import { scanSupplier, runNewsScan, getRiskProfiles, getRssItems } from "./services/NewsService";
 import { registerPipelineRoutes } from "./routes/pipeline.routes";
+import { detectFormat, mapColumns, assessQuality, applyFixes } from "./engines/data-intake";
 import {
   engagements, categories, spend_records, savings_initiatives,
   scenarios, data_imports, realization_entries, cash_flow_phasing,
@@ -225,6 +226,52 @@ export async function registerRoutes(
       row_count: rows.length,
       columns,
       sample_rows: rows.slice(0, 5),
+    });
+  });
+
+  // ========== SMART DATA INTAKE: ANALYZE ==========
+  app.post("/api/engagements/:id/imports/analyze", (req, res) => {
+    const { import_id } = req.body;
+    const staging = stagingStore[import_id];
+    if (!staging) return res.status(400).json({ error: "No staged data found for this import" });
+
+    const formatResult = detectFormat(staging.columns, staging.rows.slice(0, 10));
+    const mappingResult = mapColumns(formatResult.format, staging.columns);
+    const qualityResult = assessQuality(staging.rows, mappingResult.mapping);
+
+    res.json({
+      import_id,
+      format: formatResult,
+      mapping: mappingResult,
+      quality: qualityResult,
+    });
+  });
+
+  // ========== SMART DATA INTAKE: APPLY FIXES ==========
+  app.post("/api/engagements/:id/imports/apply-fixes", (req, res) => {
+    const { import_id, fixes } = req.body as { import_id: number; fixes?: any[] };
+    const staging = stagingStore[import_id];
+    if (!staging) return res.status(400).json({ error: "No staged data found for this import" });
+
+    // Re-detect mapping to know which columns map to which fields
+    const formatResult = detectFormat(staging.columns, staging.rows.slice(0, 10));
+    const mappingResult = mapColumns(formatResult.format, staging.columns);
+
+    // Apply either provided fixes or auto-detected high-confidence fixes
+    const qualityBefore = assessQuality(staging.rows, mappingResult.mapping);
+    const fixesToApply = fixes ?? qualityBefore.high_confidence_fixes;
+    const appliedCount = applyFixes(staging.rows, mappingResult.mapping, fixesToApply);
+
+    // Re-assess quality after fixes
+    const qualityAfter = assessQuality(staging.rows, mappingResult.mapping);
+
+    res.json({
+      import_id,
+      fixes_applied: appliedCount,
+      quality_before: qualityBefore.summary,
+      quality_after: qualityAfter.summary,
+      overall_score_before: qualityBefore.overall_score,
+      overall_score_after: qualityAfter.overall_score,
     });
   });
 

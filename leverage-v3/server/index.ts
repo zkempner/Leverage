@@ -13,6 +13,8 @@ import { runPortfolioSnapshot, getPortfolioSummary, ensurePortfolioSnapshotIndex
 import { refreshFxRates, analyzeExposure, ensureFxIndex } from "./services/FxService";
 import { runTariffLookup } from "./services/TariffLookupService";
 import { runCategoryBrief } from "./services/CategoryBriefService";
+// Pipeline step executors — registers all step handlers with PipelineOrchestrator
+import "./pipeline-executors";
 
 const app = express();
 const httpServer = createServer(app);

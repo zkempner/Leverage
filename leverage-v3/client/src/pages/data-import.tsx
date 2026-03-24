@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, FileSpreadsheet, Check, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Upload, FileSpreadsheet, Check, Loader2, Sparkles, Wrench, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const TARGET_FIELDS = [
@@ -108,6 +109,8 @@ export default function DataImportPage({ engagementId }: { engagementId: number 
   const [staged, setStaged] = useState<any>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [fixesApplied, setFixesApplied] = useState(false);
 
   const { data: imports, isLoading } = useQuery<any[]>({
     queryKey: ["/api/engagements", engagementId, "imports"],
@@ -131,12 +134,54 @@ export default function DataImportPage({ engagementId }: { engagementId: number 
     },
     onSuccess: (data) => {
       setStaged(data);
-      // Auto-detect column mappings using pattern matching
+      setAnalysis(null);
+      setFixesApplied(false);
+      // Auto-detect column mappings client-side (will be overridden by server analysis)
       setMapping(autoDetectMapping(data.columns));
       toast({ title: "File uploaded", description: `${data.row_count} rows parsed` });
+      // Auto-trigger server-side analysis
+      analyzeMutation.mutate(data.import_id);
     },
     onError: (err: any) => {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: async (importId: number) => {
+      const res = await apiRequest("POST", `/api/engagements/${engagementId}/imports/analyze`, {
+        import_id: importId,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setAnalysis(data);
+      // Override client-side mapping with server-side ERP-aware mapping
+      if (data.mapping?.mapping) {
+        setMapping(data.mapping.mapping);
+      }
+      toast({
+        title: `Format detected: ${data.format?.format?.toUpperCase() ?? "Generic"}`,
+        description: `Quality score: ${data.quality?.overall_score ?? 0}/100`,
+      });
+    },
+  });
+
+  const applyFixesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/engagements/${engagementId}/imports/apply-fixes`, {
+        import_id: staged.import_id,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setFixesApplied(true);
+      toast({
+        title: "Fixes applied",
+        description: `${data.fixes_applied} fixes. Quality: ${data.overall_score_before} → ${data.overall_score_after}`,
+      });
+      // Re-run analysis to get updated view
+      analyzeMutation.mutate(staged.import_id);
     },
   });
 
@@ -202,19 +247,141 @@ export default function DataImportPage({ engagementId }: { engagementId: number 
         </CardContent>
       </Card>
 
+      {/* Smart Analysis Card */}
+      {staged && analysis && (
+        <Card data-testid="smart-analysis">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                Smart Analysis
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {analysis.format?.format?.toUpperCase() ?? "GENERIC"}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  Confidence: {Math.round((analysis.format?.confidence ?? 0) * 100)}%
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Quality Score */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Data Quality Score</span>
+                <span className="font-semibold">{analysis.quality?.overall_score ?? 0}/100</span>
+              </div>
+              <Progress value={analysis.quality?.overall_score ?? 0} className="h-2" />
+            </div>
+
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Complete Records", value: `${analysis.quality?.summary?.completeness_pct ?? 0}%` },
+                { label: "Blank Suppliers", value: `${analysis.quality?.summary?.blank_supplier_pct ?? 0}%` },
+                { label: "Duplicates", value: `${analysis.quality?.summary?.duplicate_pct ?? 0}%` },
+                { label: "Date Format", value: analysis.quality?.summary?.date_format_detected ?? "Unknown" },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center p-2 bg-muted rounded">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="text-sm font-semibold">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* High Confidence Fixes */}
+            {(analysis.quality?.high_confidence_fixes?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium flex items-center gap-1">
+                  <Wrench className="h-3.5 w-3.5" />
+                  Auto-Fixes Available ({analysis.quality.high_confidence_fixes.length})
+                </p>
+                <div className="space-y-1">
+                  {analysis.quality.high_confidence_fixes.map((fix: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-green-50 p-2 rounded">
+                      <span>{fix.description}</span>
+                      <span className="text-muted-foreground">{fix.affected_count} records</span>
+                    </div>
+                  ))}
+                </div>
+                {!fixesApplied && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => applyFixesMutation.mutate()}
+                    disabled={applyFixesMutation.isPending}
+                  >
+                    {applyFixesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                    Apply All Fixes
+                  </Button>
+                )}
+                {fixesApplied && (
+                  <Badge variant="default" className="text-xs bg-green-600">Fixes Applied</Badge>
+                )}
+              </div>
+            )}
+
+            {/* Issues */}
+            {(analysis.quality?.low_confidence_issues?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  Issues to Review ({analysis.quality.low_confidence_issues.length})
+                </p>
+                <div className="space-y-1">
+                  {analysis.quality.low_confidence_issues.map((issue: any, i: number) => (
+                    <div key={i} className={`flex items-center justify-between text-xs p-2 rounded ${
+                      issue.severity === "high" ? "bg-red-50" : issue.severity === "medium" ? "bg-amber-50" : "bg-gray-50"
+                    }`}>
+                      <span>{issue.description}</span>
+                      <Badge variant="outline" className="text-xs">{issue.severity}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Matched signals */}
+            {analysis.format?.matched_signals?.length > 0 && (
+              <details className="text-xs">
+                <summary className="text-muted-foreground cursor-pointer">
+                  Detected signals: {analysis.format.matched_signals.length} ERP columns matched
+                </summary>
+                <p className="mt-1 text-muted-foreground">
+                  {analysis.format.matched_signals.join(", ")}
+                </p>
+              </details>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Column Mapper */}
       {staged && (
         <Card data-testid="column-mapper">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">
               Map Columns — {staged.file_name} ({staged.row_count} rows)
+              {analysis && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {analysis.mapping?.unmapped?.length ?? 0} unmapped columns
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {analyzeMutation.isPending && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted rounded">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing data format and quality...
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {staged.columns.map((col: string) => (
                 <div key={col} className="flex items-center gap-2">
-                  <span className="text-sm font-mono w-40 truncate">{col}</span>
+                  <span className="text-sm font-mono w-40 truncate" title={col}>{col}</span>
                   <span className="text-muted-foreground">→</span>
                   <Select
                     value={mapping[col] || "skip"}
@@ -229,6 +396,11 @@ export default function DataImportPage({ engagementId }: { engagementId: number 
                       ))}
                     </SelectContent>
                   </Select>
+                  {analysis?.mapping?.mapping_confidence?.[mapping[col]] != null && mapping[col] !== "skip" && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {Math.round(analysis.mapping.mapping_confidence[mapping[col]] * 100)}%
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
