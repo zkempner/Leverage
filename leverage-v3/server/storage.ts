@@ -47,8 +47,8 @@ import {
 // We import only the session (no native dep) and build the db object ourselves.
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core/dialect";
-// @ts-expect-error — importing internal session module directly to avoid better-sqlite3 native import
-import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session.js";
+// @ts-expect-error — importing session module directly to avoid better-sqlite3 native import from driver
+import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { eq, and, sql, desc, asc, like, isNull } from "drizzle-orm";
 import * as fs from "fs";
 import * as path from "path";

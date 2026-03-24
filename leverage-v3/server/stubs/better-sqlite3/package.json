@@ -1,0 +1,7 @@
+{
+  "name": "better-sqlite3",
+  "version": "0.0.0",
+  "description": "Stub package — sql.js is used instead of the native better-sqlite3",
+  "main": "index.js",
+  "types": "index.d.ts"
+}
