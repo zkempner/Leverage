@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,6 +38,37 @@ export default function OnboardingPage() {
     queryKey: [`/api/clients/${clientId}/onboarding`],
     queryFn: () => fetch(`/api/clients/${clientId}/onboarding`).then((r) => r.json()),
   });
+
+  // Hydrate form fields from saved onboarding data
+  useEffect(() => {
+    if (!onboarding) return;
+    try {
+      if (onboarding.targetAudience) {
+        const parsed = JSON.parse(onboarding.targetAudience);
+        if (parsed.description) setAudience(parsed.description);
+      }
+      if (onboarding.goals) {
+        const parsed = JSON.parse(onboarding.goals);
+        if (parsed.description) setGoals(parsed.description);
+      }
+      if (onboarding.brandVoice) {
+        const parsed = JSON.parse(onboarding.brandVoice);
+        if (parsed.description) setBrandVoice(parsed.description);
+      }
+      if (onboarding.competitors) {
+        const parsed = JSON.parse(onboarding.competitors);
+        if (parsed.list) setCompetitors(parsed.list);
+      }
+      if (onboarding.existingChannels) {
+        const parsed = JSON.parse(onboarding.existingChannels);
+        if (parsed.description) setChannels(parsed.description);
+      }
+      if (onboarding.budgetBreakdown) {
+        const parsed = JSON.parse(onboarding.budgetBreakdown);
+        if (parsed.notes) setBudgetNotes(parsed.notes);
+      }
+    } catch {}
+  }, [onboarding]);
 
   const { data: client } = useQuery({
     queryKey: [`/api/clients/${clientId}`],
@@ -93,7 +124,7 @@ export default function OnboardingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `[ONBOARDING INTERVIEW] The client says: "${userMessage}"\n\nContinue the onboarding interview. Ask follow-up questions about their business, target market, competitors, goals, budget, and brand voice. Be conversational and extract useful marketing insights. When you feel you have enough information, summarize what you've learned.`,
+          message: `[ONBOARDING INTERVIEW] The client says: "${userMessage}"\n\nQuestionnaire responses so far:\n- Target Audience: ${audience || "(not yet provided)"}\n- Marketing Goals: ${goals || "(not yet provided)"}\n- Brand Voice: ${brandVoice || "(not yet provided)"}\n- Competitors: ${competitors || "(not yet provided)"}\n- Existing Channels: ${channels || "(not yet provided)"}\n- Budget Notes: ${budgetNotes || "(not yet provided)"}\n\nContinue the onboarding interview. Reference the questionnaire answers above when relevant. Ask follow-up questions about their business, target market, competitors, goals, budget, and brand voice. Be conversational and extract useful marketing insights. When you feel you have enough information, summarize what you've learned.`,
         }),
       });
 
@@ -137,6 +168,16 @@ export default function OnboardingPage() {
     }
   };
 
+  // Auto-save questionnaire when switching tabs
+  const handleTabChange = (value: string) => {
+    if (audience || goals || brandVoice || competitors || channels || budgetNotes) {
+      saveQuestionnaire.mutate();
+    }
+    setActiveTab(value);
+  };
+
+  const [activeTab, setActiveTab] = useState("questionnaire");
+
   const isCompleted = !!onboarding?.completedAt;
   const progress = [audience, goals, brandVoice, competitors].filter(Boolean).length * 25;
 
@@ -153,7 +194,7 @@ export default function OnboardingPage() {
       </div>
 
       <div className="p-8">
-        <Tabs defaultValue="questionnaire" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList>
             <TabsTrigger value="questionnaire">Questionnaire</TabsTrigger>
             <TabsTrigger value="interview">AI Interview</TabsTrigger>
