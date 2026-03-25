@@ -117,9 +117,9 @@ function sqlitePragma(pragma: string): any[] {
     if (typeof sqlite.pragma === "function") {
       return sqlite.pragma(pragma);
     }
-    // sql.js: use exec
-    const result = sqliteExec(`PRAGMA ${pragma}`);
-    if (result.length > 0 && result[0].values.length > 0) {
+    // sql.js: use exec which returns result arrays
+    const result = sqlite.exec(`PRAGMA ${pragma}`);
+    if (result && result.length > 0 && result[0].values.length > 0) {
       const cols = result[0].columns;
       return result[0].values.map((row: any[]) => {
         const obj: any = {};
@@ -132,9 +132,7 @@ function sqlitePragma(pragma: string): any[] {
 }
 
 function sqliteExec(sqlStr: string) {
-  if (typeof sqlite.exec === "function") {
-    sqlite.exec(sqlStr);
-  }
+  sqlite.exec(sqlStr);
 }
 
 // ========================================================================
@@ -1055,6 +1053,9 @@ if (currentVersion < 4) {
 
   console.log("Schema v4 applied: 18 new Command Center tables (cc_engagements, cc_team_members, cc_drl_items, cc_rif_entries, cc_work_plan_phases, cc_work_plan_tasks, cc_meetings, cc_action_items, cc_emails, cc_interview_guides, cc_stakeholders, cc_risks_issues, cc_decisions, cc_milestones, cc_documents, cc_status_reports, cc_key_metrics, cc_metric_snapshots).");
 }
+
+// Persist sql.js database to disk after migrations
+if (_saveToDisk) _saveToDisk();
 
 function seedDatabase() {
   const existing = db.select().from(engagements).all();
