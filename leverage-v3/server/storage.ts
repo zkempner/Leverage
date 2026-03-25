@@ -63,18 +63,20 @@ import {
   type CcKeyMetric, type InsertCcKeyMetric,
   type CcMetricSnapshot, type InsertCcMetricSnapshot,
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { eq, and, sql, desc, asc, like, isNull } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 
-// Try better-sqlite3 (native, fast), fall back to sql.js (pure WASM, no compilation)
-let db: ReturnType<typeof drizzle>;
+// All imports of better-sqlite3 and its drizzle driver MUST be dynamic
+// so Node doesn't fail at import-resolution time when the package is missing.
+let db: any;
 let sqlite: any;
 let _saveToDisk: (() => void) | null = null;
 
 try {
   const BetterSqlite3 = (await import("better-sqlite3")).default;
+  const { drizzle } = await import("drizzle-orm/better-sqlite3");
   sqlite = new BetterSqlite3("data.db");
   sqlite.pragma("journal_mode = WAL");
   db = drizzle(sqlite);
@@ -93,7 +95,7 @@ try {
     sqlite = new SQL.Database();
   }
 
-  db = drizzleSqlJs(sqlite) as any;
+  db = drizzleSqlJs(sqlite);
 
   // sql.js is in-memory — persist to disk periodically
   _saveToDisk = () => {
