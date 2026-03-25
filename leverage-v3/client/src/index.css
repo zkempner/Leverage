@@ -34,7 +34,7 @@
   --muted-foreground: 0 2% 45%;
   --accent: 37 100% 41%;
   --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 42%;
+  --destructive: 351 74% 37%;    /* A&M Crimson #A6192E */
   --destructive-foreground: 0 0% 98%;
   --input: 210 10% 78%;
   --ring: 205 100% 14%;
@@ -58,14 +58,17 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* A&M Brand custom props */
-  --am-navy: 205 100% 14%;
-  --am-gold: 37 100% 41%;
-  --am-blue: 200 100% 40%;
-  --am-steel: 209 36% 54%;
-  --am-green: 121 46% 30%;
-  --am-teal: 191 100% 25%;
-  --am-charcoal: 0 2% 45%;
+  /* A&M Brand custom props (from A&M Theme.thmx) */
+  --am-navy: 205 100% 14%;       /* #002B49 — R:0 G:43 B:73 */
+  --am-gold: 37 100% 41%;        /* #CF7F00 — R:207 G:127 B:0 */
+  --am-blue: 200 100% 40%;       /* #0085CA — R:0 G:133 B:202 */
+  --am-steel: 209 36% 54%;       /* #5E8AB4 — R:94 G:138 B:180 */
+  --am-green: 121 46% 30%;       /* #29702A — R:41 G:112 B:42 */
+  --am-teal: 191 100% 25%;       /* #00677F — R:0 G:103 B:127 */
+  --am-charcoal: 0 2% 45%;       /* #767171 — R:118 G:113 B:113 */
+  --am-gray: 0 0% 59%;           /* #969696 — R:150 G:150 B:150 */
+  --am-purple: 290 58% 23%;      /* #51195D — R:81 G:25 B:93 */
+  --am-crimson: 351 74% 37%;     /* #A6192E — R:166 G:25 B:46 */
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));

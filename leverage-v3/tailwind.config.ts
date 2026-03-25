@@ -80,7 +80,7 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
-        // A&M Brand Colors
+        // A&M Brand Colors (from A&M Theme.thmx)
         "am-navy": "hsl(var(--am-navy) / <alpha-value>)",
         "am-gold": "hsl(var(--am-gold) / <alpha-value>)",
         "am-blue": "hsl(var(--am-blue) / <alpha-value>)",
@@ -88,6 +88,9 @@ export default {
         "am-green": "hsl(var(--am-green) / <alpha-value>)",
         "am-teal": "hsl(var(--am-teal) / <alpha-value>)",
         "am-charcoal": "hsl(var(--am-charcoal) / <alpha-value>)",
+        "am-gray": "hsl(var(--am-gray) / <alpha-value>)",
+        "am-purple": "hsl(var(--am-purple) / <alpha-value>)",
+        "am-crimson": "hsl(var(--am-crimson) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
