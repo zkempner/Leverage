@@ -64,62 +64,39 @@ import {
   type CcMetricSnapshot, type InsertCcMetricSnapshot,
 } from "@shared/schema";
 import { eq, and, sql, desc, asc, like, isNull } from "drizzle-orm";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/sql-js";
+import initSqlJs from "sql.js";
 import * as fs from "fs";
 import * as path from "path";
 
-// All imports of better-sqlite3 and its drizzle driver MUST be dynamic
-// so Node doesn't fail at import-resolution time when the package is missing.
-let db: any;
-let sqlite: any;
-let _saveToDisk: (() => void) | null = null;
+// Use sql.js (pure WASM SQLite) — no native compilation, works everywhere
+const SQL = await initSqlJs();
+const dbPath = path.resolve("data.db");
 
-try {
-  const BetterSqlite3 = (await import("better-sqlite3")).default;
-  const { drizzle } = await import("drizzle-orm/better-sqlite3");
-  sqlite = new BetterSqlite3("data.db");
-  sqlite.pragma("journal_mode = WAL");
-  db = drizzle(sqlite);
-  console.log("[db] Using better-sqlite3 (native)");
-} catch {
-  // Fallback: sql.js (pure JavaScript SQLite via WebAssembly)
-  const initSqlJs = (await import("sql.js")).default;
-  const { drizzle: drizzleSqlJs } = await import("drizzle-orm/sql-js");
-  const SQL = await initSqlJs();
-  const dbPath = path.resolve("data.db");
-
-  if (fs.existsSync(dbPath)) {
-    const buf = fs.readFileSync(dbPath);
-    sqlite = new SQL.Database(buf);
-  } else {
-    sqlite = new SQL.Database();
-  }
-
-  db = drizzleSqlJs(sqlite);
-
-  // sql.js is in-memory — persist to disk periodically
-  _saveToDisk = () => {
-    try {
-      const data = sqlite.export();
-      fs.writeFileSync(dbPath, Buffer.from(data));
-    } catch {}
-  };
-  setInterval(_saveToDisk, 5000);
-  process.on("exit", _saveToDisk);
-  process.on("SIGINT", () => { _saveToDisk?.(); process.exit(); });
-  console.log("[db] Using sql.js (WASM — no native compilation needed)");
+let sqlite: InstanceType<typeof SQL.Database>;
+if (fs.existsSync(dbPath)) {
+  const buf = fs.readFileSync(dbPath);
+  sqlite = new SQL.Database(buf);
+} else {
+  sqlite = new SQL.Database();
 }
 
-export { db };
+export const db = drizzle(sqlite);
 
-// Helper: sqlite.pragma() works in better-sqlite3 but not sql.js
-// Wrap to handle both drivers
+// sql.js is in-memory — persist to disk
+function saveToDisk() {
+  try {
+    const data = sqlite.export();
+    fs.writeFileSync(dbPath, Buffer.from(data));
+  } catch {}
+}
+setInterval(saveToDisk, 5000);
+process.on("exit", saveToDisk);
+process.on("SIGINT", () => { saveToDisk(); process.exit(); });
+
+// sql.js helpers
 function sqlitePragma(pragma: string): any[] {
   try {
-    if (typeof sqlite.pragma === "function") {
-      return sqlite.pragma(pragma);
-    }
-    // sql.js: use exec which returns result arrays
     const result = sqlite.exec(`PRAGMA ${pragma}`);
     if (result && result.length > 0 && result[0].values.length > 0) {
       const cols = result[0].columns;
@@ -1057,7 +1034,7 @@ if (currentVersion < 4) {
 }
 
 // Persist sql.js database to disk after migrations
-if (_saveToDisk) _saveToDisk();
+saveToDisk();
 
 function seedDatabase() {
   const existing = db.select().from(engagements).all();
