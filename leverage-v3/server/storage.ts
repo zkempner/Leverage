@@ -64,26 +64,89 @@ import {
   type CcMetricSnapshot, type InsertCcMetricSnapshot,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
 import { eq, and, sql, desc, asc, like, isNull } from "drizzle-orm";
 import * as fs from "fs";
 import * as path from "path";
 
-const sqlite = new Database("data.db");
-sqlite.pragma("journal_mode = WAL");
+// Try better-sqlite3 (native, fast), fall back to sql.js (pure WASM, no compilation)
+let db: ReturnType<typeof drizzle>;
+let sqlite: any;
+let _saveToDisk: (() => void) | null = null;
 
-export const db = drizzle(sqlite);
+try {
+  const BetterSqlite3 = (await import("better-sqlite3")).default;
+  sqlite = new BetterSqlite3("data.db");
+  sqlite.pragma("journal_mode = WAL");
+  db = drizzle(sqlite);
+  console.log("[db] Using better-sqlite3 (native)");
+} catch {
+  // Fallback: sql.js (pure JavaScript SQLite via WebAssembly)
+  const initSqlJs = (await import("sql.js")).default;
+  const { drizzle: drizzleSqlJs } = await import("drizzle-orm/sql-js");
+  const SQL = await initSqlJs();
+  const dbPath = path.resolve("data.db");
+
+  if (fs.existsSync(dbPath)) {
+    const buf = fs.readFileSync(dbPath);
+    sqlite = new SQL.Database(buf);
+  } else {
+    sqlite = new SQL.Database();
+  }
+
+  db = drizzleSqlJs(sqlite) as any;
+
+  // sql.js is in-memory — persist to disk periodically
+  _saveToDisk = () => {
+    try {
+      const data = sqlite.export();
+      fs.writeFileSync(dbPath, Buffer.from(data));
+    } catch {}
+  };
+  setInterval(_saveToDisk, 5000);
+  process.on("exit", _saveToDisk);
+  process.on("SIGINT", () => { _saveToDisk?.(); process.exit(); });
+  console.log("[db] Using sql.js (WASM — no native compilation needed)");
+}
+
+export { db };
+
+// Helper: sqlite.pragma() works in better-sqlite3 but not sql.js
+// Wrap to handle both drivers
+function sqlitePragma(pragma: string): any[] {
+  try {
+    if (typeof sqlite.pragma === "function") {
+      return sqlite.pragma(pragma);
+    }
+    // sql.js: use exec
+    const result = sqliteExec(`PRAGMA ${pragma}`);
+    if (result.length > 0 && result[0].values.length > 0) {
+      const cols = result[0].columns;
+      return result[0].values.map((row: any[]) => {
+        const obj: any = {};
+        cols.forEach((c: string, i: number) => { obj[c] = row[i]; });
+        return obj;
+      });
+    }
+    return [];
+  } catch { return []; }
+}
+
+function sqliteExec(sqlStr: string) {
+  if (typeof sqlite.exec === "function") {
+    sqlite.exec(sqlStr);
+  }
+}
 
 // ========================================================================
 // Schema v2 — DDL with all tables, new columns, and indexes
 // ========================================================================
 
 // Check current schema version
-const currentVersion = (sqlite.pragma("user_version") as { user_version: number }[])[0]?.user_version ?? 0;
+const currentVersion = (sqlitePragma("user_version") as { user_version: number }[])[0]?.user_version ?? 0;
 
 if (currentVersion < 2) {
   // Drop and recreate all tables for v2 (fresh deploy strategy per spec 7D.1)
-  sqlite.exec(`
+  sqliteExec(`
     -- Drop all existing tables (v2 is a clean-slate schema migration)
     DROP TABLE IF EXISTS tariff_impacts;
     DROP TABLE IF EXISTS assumption_benchmarks;
@@ -502,7 +565,7 @@ if (currentVersion < 2) {
 }
 
 if (currentVersion < 3) {
-  sqlite.exec(`
+  sqliteExec(`
     -- ================================================================
     -- v3 Migration: Add 8 new tables. Non-destructive (CREATE IF NOT EXISTS).
     -- ================================================================
@@ -663,7 +726,7 @@ if (currentVersion < 3) {
 // Schema v4 — Command Center tables (29–46)
 // ========================================================================
 if (currentVersion < 4) {
-  sqlite.exec(`
+  sqliteExec(`
     -- 29. CC Engagements
     CREATE TABLE IF NOT EXISTS cc_engagements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
