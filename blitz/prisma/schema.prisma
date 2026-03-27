@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id             String   @id @default(cuid())
+  name           String
+  industry       String?
+  website        String?
+  logoUrl        String?
+  monthlyBudget  Float?
+  status         String   @default("onboarding")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  onboarding     ClientOnboarding?
+  strategies     Strategy[]
+  campaigns      Campaign[]
+  content        Content[]
+  metrics        PerformanceMetric[]
+  reports        Report[]
+  copilotSessions CopilotSession[]
+}
+
+model ClientOnboarding {
+  id                    String   @id @default(cuid())
+  clientId              String   @unique
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  targetAudience        String?
+  goals                 String?
+  brandVoice            String?
+  competitors           String?
+  existingChannels      String?
+  budgetBreakdown       String?
+
+  interviewTranscript   String?
+  interviewInsights     String?
+
+  documents             Document[]
+
+  completedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Document {
+  id            String           @id @default(cuid())
+  onboardingId  String
+  onboarding    ClientOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  filename      String
+  fileType      String
+  filePath      String
+  extractedText String?
+  insights      String?
+  createdAt     DateTime         @default(now())
+}
+
+model Strategy {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name              String
+  type              String
+  status            String   @default("draft")
+
+  executiveSummary  String?
+  marketAnalysis    String?
+  audiencePersonas  String?
+  channelStrategy   String?
+  contentPlan       String?
+  kpiTargets        String?
+  budgetBreakdown   String?
+  roadmap           String?
+  campaignBriefs    String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Campaign {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name            String
+  channel         String
+  status          String   @default("draft")
+  objective       String?
+  targetAudience  String?
+  budget          Float?
+  startDate       DateTime?
+  endDate         DateTime?
+  notes           String?
+
+  content         Content[]
+  metrics         PerformanceMetric[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Content {
+  id           String    @id @default(cuid())
+  clientId     String
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaignId   String?
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  type         String
+  channel      String?
+  name         String
+  body         String
+  metadata     String?
+  status       String    @default("draft")
+  aiGenerated  Boolean   @default(true)
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model PerformanceMetric {
+  id             String    @id @default(cuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaignId     String?
+  campaign       Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  date           DateTime
+  channel        String
+  source         String    @default("import")
+
+  impressions    Int?
+  clicks         Int?
+  ctr            Float?
+  cpc            Float?
+  spend          Float?
+  conversions    Int?
+  conversionRate Float?
+  cpa            Float?
+  roas           Float?
+
+  leads          Int?
+  mqls           Int?
+  sqls           Int?
+  pipelineValue  Float?
+
+  revenue        Float?
+  cac            Float?
+  ltv            Float?
+
+  createdAt      DateTime @default(now())
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String
+  type      String
+  dateFrom  DateTime
+  dateTo    DateTime
+  sections  String
+  filePath  String?
+  format    String?
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+}
+
+model CopilotSession {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String?
+  messages  String   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

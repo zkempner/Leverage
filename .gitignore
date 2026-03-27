@@ -1,0 +1,21 @@
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+
+# Database
+*.db
+*.db-journal
+
+# OS files
+.DS_Store
+
+# Uploads
+uploads/
